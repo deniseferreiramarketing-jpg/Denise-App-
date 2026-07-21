@@ -435,13 +435,8 @@ async function saveCliente(cliente: any): Promise<void> {
     const clientRef = doc(firestoreDB, "clientes", cliente.id);
     await setDoc(clientRef, cliente);
 
-    if (cliente.tokenAcesso) {
-      await setDoc(doc(firestoreDB, "clienteTokens", cliente.tokenAcesso), {
-        clienteId: cliente.id,
-        tokenAcesso: cliente.tokenAcesso,
-        updatedAt: new Date().toISOString()
-      });
-    }
+    // O token também é usado como ID nos novos cadastros. Assim o link público
+    // abre o prontuário diretamente, sem depender de uma segunda coleção/índice.
 
     // Confirmação real: só considera salvo depois de reler o documento.
     const verification = await getDoc(clientRef);
@@ -473,6 +468,7 @@ async function deleteCliente(id: string): Promise<boolean> {
 
 // Client endpoint: Get all patients
 app.get("/api/clientes", async (req, res) => {
+  res.set("Cache-Control", "no-store");
   try {
     const data = await getClientes();
     res.json(data);
@@ -483,6 +479,7 @@ app.get("/api/clientes", async (req, res) => {
 
 // Client endpoint: Fetch single patient by ID or access token (important for the client link)
 app.get("/api/clientes/:id", async (req, res) => {
+  res.set("Cache-Control", "no-store");
   try {
     const idOrToken = req.params.id;
     const match = await getClienteByIdOrToken(idOrToken);
@@ -503,8 +500,10 @@ app.post("/api/clientes", async (req, res) => {
     return res.status(400).json({ error: "O nome completo do paciente é indispensável." });
   }
 
-  const newId = `paciente-${Date.now()}`;
-  const token = `token-${Math.random().toString(36).substring(2, 10)}${Date.now().toString().substring(8)}`;
+  const token = `token-${Math.random().toString(36).substring(2, 10)}${Date.now().toString().slice(-6)}`;
+  // O documento é salvo com o próprio token como ID. Isso elimina falhas de
+  // sincronização entre o paciente e um índice separado de tokens.
+  const newId = token;
 
   const newPatient = {
     id: newId,

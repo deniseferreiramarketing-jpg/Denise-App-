@@ -136,6 +136,7 @@ Enfermagem - Podologia - Estética`;
   const [newNome, setNewNome] = useState("");
   const [newTelefone, setNewTelefone] = useState("");
   const [newEmail, setNewEmail] = useState("");
+  const [creatingClient, setCreatingClient] = useState(false);
 
   // Technical Evaluation Form states for editing
   const [avaliacao, setAvaliacao] = useState<AvaliacaoTecnica>({
@@ -271,26 +272,41 @@ Enfermagem - Podologia - Estética`;
   // Handle client creation
   const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newNome.trim()) return;
+    if (!newNome.trim() || creatingClient) return;
 
+    setCreatingClient(true);
     try {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), 20000);
       const res = await fetch("/api/clientes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome: newNome, telefone: newTelefone, email: newEmail })
+        body: JSON.stringify({ nome: newNome.trim(), telefone: newTelefone, email: newEmail }),
+        signal: controller.signal
       });
-      if (res.ok) {
-        const created: Cliente = await res.json();
-        setClientes(prev => [created, ...prev]);
-        setShowInviteModal(false);
-        setNewNome("");
-        setNewTelefone("");
-        setNewEmail("");
-        handleSelectClient(created); // Automatically select newly created patient
-        setActiveTab("anamnese");
+      window.clearTimeout(timeoutId);
+
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(payload?.detalhe || payload?.error || `Erro ${res.status} ao salvar o paciente.`);
       }
-    } catch (err) {
-      alert("Falha ao criar o convite.");
+
+      const created: Cliente = payload;
+      setClientes(prev => [created, ...prev.filter(c => c.id !== created.id)]);
+      setShowInviteModal(false);
+      setNewNome("");
+      setNewTelefone("");
+      setNewEmail("");
+      handleSelectClient(created);
+      setActiveTab("anamnese");
+    } catch (err: any) {
+      const message = err?.name === "AbortError"
+        ? "O cadastro demorou mais de 20 segundos. Atualize a lista antes de tentar novamente."
+        : (err?.message || "Falha ao criar o cadastro.");
+      alert(message);
+      await fetchClientes();
+    } finally {
+      setCreatingClient(false);
     }
   };
 
@@ -383,7 +399,7 @@ Enfermagem - Podologia - Estética`;
   // Format share link
   const getShareLink = (token: string) => {
     const currentUrl = window.location.origin;
-    return `${currentUrl}?id=${token}`;
+    return `${currentUrl}/?id=${encodeURIComponent(token)}`;
   };
 
   // Copy share link and open WhatsApp
@@ -1503,16 +1519,18 @@ Enfermagem - Podologia - Estética`;
                   id="btn-close-modal"
                   type="button"
                   onClick={() => setShowInviteModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-stone-500 hover:bg-stone-50 rounded-lg cursor-pointer"
+                  disabled={creatingClient}
+                  className="px-4 py-2 text-xs font-semibold text-stone-500 hover:bg-stone-50 rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancelar
                 </button>
                 <button
                   id="btn-submit-modal"
                   type="submit"
-                  className="px-4 py-2 text-xs font-semibold rounded-lg bg-stone-900 text-gold-100 hover:bg-stone-850 cursor-pointer shadow"
+                  disabled={creatingClient}
+                  className="px-4 py-2 text-xs font-semibold rounded-lg bg-stone-900 text-gold-100 hover:bg-stone-850 cursor-pointer shadow disabled:opacity-60 disabled:cursor-wait"
                 >
-                  Confirmar Cadastro
+                  {creatingClient ? "Salvando..." : "Confirmar Cadastro"}
                 </button>
               </div>
             </form>

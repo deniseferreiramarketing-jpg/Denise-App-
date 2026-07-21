@@ -1,0 +1,11 @@
+CORREÇÃO APLICADA
+
+1. O cadastro não depende mais da coleção clienteTokens.
+2. O token do link agora também é o ID do documento do paciente no Firestore.
+3. O link público abre o documento diretamente.
+4. O botão de cadastro mostra "Salvando..." e não permite clique duplo.
+5. Erros do servidor agora são exibidos em vez de deixar a tela aparentemente congelada.
+6. As consultas da API usam no-store para evitar dados antigos em cache.
+
+Após substituir os arquivos, faça Commit e Push no GitHub Desktop e aguarde o deploy Ready na Vercel.
+Teste somente com um paciente novo.
