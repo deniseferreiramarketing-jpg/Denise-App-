@@ -1,5 +1,4 @@
 import type { Request, Response } from "express";
-import { GoogleGenAI, Type } from "@google/genai";
 import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   collection,
@@ -35,31 +34,63 @@ function getRouteId(req: Request): string {
 }
 
 async function locatePatient(idOrToken: string) {
-  const directRef = doc(db, "clientes", idOrToken);
-  const directSnapshot = await getDoc(directRef);
-
+  const directSnapshot = await getDoc(doc(db, "clientes", idOrToken));
   if (directSnapshot.exists()) {
-    return {
-      documentId: directSnapshot.id,
-      data: directSnapshot.data() as Record<string, any>,
-    };
+    return { documentId: directSnapshot.id, data: directSnapshot.data() as Record<string, any> };
   }
 
   const tokenSnapshot = await getDocs(
-    query(
-      collection(db, "clientes"),
-      where("tokenAcesso", "==", idOrToken),
-      limit(1),
-    ),
+    query(collection(db, "clientes"), where("tokenAcesso", "==", idOrToken), limit(1)),
   );
-
   if (tokenSnapshot.empty) return null;
 
   const found = tokenSnapshot.docs[0];
-  return {
-    documentId: found.id,
-    data: found.data() as Record<string, any>,
-  };
+  return { documentId: found.id, data: found.data() as Record<string, any> };
+}
+
+function buildPrompt(patient: Record<string, any>, resumoManual: string): string {
+  const tech = patient.avaliacaoTecnica || {};
+  const yesNo = (value: unknown) => (value ? "Sim" : "Não");
+  const list = (items: Array<string | false | undefined>) =>
+    items.filter(Boolean).join(", ") || "Nenhuma alteração assinalada";
+
+  return `Você apoia a documentação clínica da Clínica DF Saúde Integrada. Gere orientações pós-atendimento prudentes, objetivas e acolhedoras. Não diagnostique, não prescreva medicamentos e recomende avaliação profissional diante de sinais de alerta.
+
+PACIENTE
+Nome: ${patient.identificacao?.nomeCompleto || "Paciente"}
+Queixa: ${patient.queixaPrincipal || "Não informada"}
+Diabetes: ${yesNo(patient.historicoSaude?.diabetes)}
+Hipertensão: ${yesNo(patient.historicoSaude?.hipertensao)}
+Problemas circulatórios/varizes: ${yesNo(patient.historicoSaude?.circulacao)}
+Alergias: ${patient.medicamentosAlergias?.quaisAlergias || "Nenhuma relatada"}
+
+AVALIAÇÃO TÉCNICA
+Unhas: ${list([
+    tech.unhasEspessadas && "espessadas",
+    tech.unhasMicose && "suspeita/registro de micose",
+    tech.unhasDescolamento && "descolamento",
+    tech.unhasEncravada && "encravada",
+  ])}
+Pele: ${list([
+    tech.peleRessecada && "ressecada",
+    tech.peleFissuras && "fissuras",
+    tech.peleCalosidade && "calosidades",
+    tech.peleHiperqueratose && "hiperqueratose",
+    tech.peleVerruga && "verruga registrada",
+  ])}
+Observações gerais: ${tech.observacoesGerais || "Sem observações"}
+Resumo da profissional: ${resumoManual || "Sem resumo adicional"}
+
+Responda SOMENTE com JSON válido, sem crases e sem texto externo, neste formato:
+{"resumoProcedimento":"...","orientacoesHomeCare":"...","dataRetornoRecomendada":"...","lembreteMensagemCustom":"..."}`;
+}
+
+function extractJson(text: string): Record<string, string> {
+  const cleaned = text.trim().replace(/^```json\s*/i, "").replace(/\s*```$/i, "");
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start < 0 || end <= start) throw new Error("A IA não retornou JSON válido.");
+  return JSON.parse(cleaned.slice(start, end + 1));
 }
 
 export default async function handler(req: Request, res: Response) {
@@ -72,146 +103,86 @@ export default async function handler(req: Request, res: Response) {
 
   try {
     const idOrToken = getRouteId(req);
-    if (!idOrToken) {
-      return res.status(400).json({ error: "Identificador do paciente não informado." });
-    }
+    if (!idOrToken) return res.status(400).json({ error: "Paciente não informado." });
 
     const located = await locatePatient(idOrToken);
-    if (!located) {
-      return res.status(404).json({ error: "Paciente não encontrado." });
-    }
+    if (!located) return res.status(404).json({ error: "Paciente não encontrado." });
 
     const apiKey = String(process.env.GEMINI_API_KEY || "").trim();
     if (!apiKey) {
-      return res.status(500).json({
-        error: "A variável GEMINI_API_KEY não está disponível nesta implantação da Vercel.",
+      return res.status(500).json({ error: "A variável GEMINI_API_KEY não está configurada na Vercel." });
+    }
+
+    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 35_000);
+
+    let geminiResponse: globalThis.Response;
+    try {
+      geminiResponse = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: buildPrompt(located.data, String(req.body?.resumoManual || "").trim()) }] }],
+            generationConfig: {
+              responseMimeType: "application/json",
+              temperature: 0.25,
+              maxOutputTokens: 1200,
+            },
+          }),
+          signal: controller.signal,
+        },
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    const raw = await geminiResponse.text();
+    if (!geminiResponse.ok) {
+      let detail = raw;
+      try {
+        const parsed = JSON.parse(raw);
+        detail = parsed?.error?.message || parsed?.error || raw;
+      } catch {}
+      return res.status(geminiResponse.status).json({
+        error: "O Gemini não conseguiu gerar o plano.",
+        detalhe: String(detail).slice(0, 500),
       });
     }
 
-    const patient = located.data;
-    const resumoManual = String(req.body?.resumoManual || "").trim();
-    const techEval = patient.avaliacaoTecnica || {};
+    const payload = JSON.parse(raw);
+    const text = payload?.candidates?.[0]?.content?.parts?.map((part: any) => part?.text || "").join("") || "";
+    if (!text) throw new Error("O Gemini retornou uma resposta vazia.");
 
-    const patientName = patient.identificacao?.nomeCompleto || "Paciente";
-    const isDiabetic = patient.historicoSaude?.diabetes
-      ? "SIM (atenção redobrada para prevenção de complicações)"
-      : "Não";
-    const hasHypertension = patient.historicoSaude?.hipertensao ? "Sim" : "Não";
-    const hasCirculationProblem = patient.historicoSaude?.circulacao ? "Sim" : "Não";
-    const otherHealthConditions = patient.historicoSaude?.outrasCondicoes || "Nenhuma relatada";
-    const allergies = patient.medicamentosAlergias?.alergias === "sim"
-      ? patient.medicamentosAlergias?.quaisAlergias || "Alergia relatada, sem descrição"
-      : "Nenhuma relatada";
-    const safetyShoesInput = patient.habitosRotina?.calcadoSeguranca === "sim"
-      ? "Usa calçado de segurança rígido"
-      : "Não usa calçado de segurança rígido";
-
-    const checkedUnhas = [
-      techEval.unhasEspessadas && "unhas espessadas",
-      techEval.unhasMicose && "micose ungueal",
-      techEval.unhasDescolamento && "descolamento",
-      techEval.unhasEncravada && "unha encravada",
-    ].filter(Boolean).join(", ") || "Unhas sem alterações assinaladas";
-
-    const checkedPele = [
-      techEval.peleRessecada && "pele ressecada",
-      techEval.peleFissuras && "fissuras",
-      techEval.peleCalosidade && "calosidade plantar",
-      techEval.peleHiperqueratose && "hiperqueratose",
-      techEval.peleVerruga && "verruga plana",
-    ].filter(Boolean).join(", ") || "Pele plantar sem alterações assinaladas";
-
-    const promptText = `
-Você é um assistente de apoio à documentação clínica da Clínica DF Saúde Integrada, da Dra. Denise Ferreira.
-Gere orientações pós-atendimento personalizadas, acolhedoras, objetivas e prudentes. Não faça diagnóstico novo, não prescreva medicamentos e não substitua avaliação profissional.
-
-Paciente:
-- Nome: ${patientName}
-- Profissão: ${patient.identificacao?.profissao || "Não informada"}
-- Queixa principal: ${patient.queixaPrincipal || "Não informada"}
-- Diabetes: ${isDiabetic}
-- Hipertensão: ${hasHypertension}
-- Circulação/varizes: ${hasCirculationProblem}
-- Outras condições: ${otherHealthConditions}
-- Alergias: ${allergies}
-- Calçado de segurança: ${safetyShoesInput}
-- Calçado mais utilizado: ${patient.habitosRotina?.tipoCalcadoMaisUtilizado || "Não informado"}
-
-Avaliação e atendimento:
-- Unhas: ${checkedUnhas}. Observações: ${techEval.unhasObservacoes || "Sem observações"}
-- Pele: ${checkedPele}. Observações: ${techEval.peleObservacoes || "Sem observações"}
-- Sensibilidade: ${techEval.sensibilidade || "Não informada"}. Observações: ${techEval.sensibilidadeObservacoes || "Sem observações"}
-- Circulação: ${techEval.circulacaoVal || "Não informada"}. Observações: ${techEval.circulacaoObservacoes || "Sem observações"}
-- Pé direito: ${techEval.peDireito || "Não informado"}
-- Pé esquerdo: ${techEval.peEsquerdo || "Não informado"}
-- Resumo manual: ${resumoManual || "Nenhum resumo adicional"}
-
-Retorne estritamente um JSON com:
-- resumoProcedimento: parágrafo profissional e humano sobre o atendimento;
-- orientacoesHomeCare: tópicos em Markdown com cuidados domiciliares seguros e sinais de alerta;
-- dataRetornoRecomendada: intervalo sugerido, condicionado à evolução clínica;
-- lembreteMensagemCustom: mensagem curta e acolhedora para WhatsApp, usando *negrito* e poucos emojis.
-`;
-
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: promptText,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            resumoProcedimento: { type: Type.STRING },
-            orientacoesHomeCare: { type: Type.STRING },
-            dataRetornoRecomendada: { type: Type.STRING },
-            lembreteMensagemCustom: { type: Type.STRING },
-          },
-          required: [
-            "resumoProcedimento",
-            "orientacoesHomeCare",
-            "dataRetornoRecomendada",
-            "lembreteMensagemCustom",
-          ],
-        },
-      },
-    });
-
-    const resultText = response.text;
-    if (!resultText) {
-      throw new Error("A IA retornou uma resposta vazia.");
-    }
-
-    const aiParsed = JSON.parse(resultText) as Record<string, string>;
+    const parsed = extractJson(text);
     const posCareRecord = {
-      resumoProcedimento: aiParsed.resumoProcedimento || "",
-      orientacoesHomeCare: aiParsed.orientacoesHomeCare || "",
-      dataRetornoRecomendada: aiParsed.dataRetornoRecomendada || "",
-      lembreteMensagemCustom: aiParsed.lembreteMensagemCustom || "",
+      resumoProcedimento: String(parsed.resumoProcedimento || ""),
+      orientacoesHomeCare: String(parsed.orientacoesHomeCare || ""),
+      dataRetornoRecomendada: String(parsed.dataRetornoRecomendada || ""),
+      lembreteMensagemCustom: String(parsed.lembreteMensagemCustom || ""),
       geradoPorIA: true,
       dataCriacao: new Date().toISOString(),
     };
 
-    const updatedAt = new Date().toISOString();
     await setDoc(
       doc(db, "clientes", located.documentId),
-      {
-        posCare: posCareRecord,
-        updatedAt,
-      },
+      { posCare: posCareRecord, updatedAt: new Date().toISOString() },
       { merge: true },
     );
-
-    const confirmation = await getDoc(doc(db, "clientes", located.documentId));
-    if (!confirmation.exists() || !confirmation.data()?.posCare) {
-      throw new Error("O Firestore não confirmou a gravação do plano de cuidados.");
-    }
 
     return res.status(200).json(posCareRecord);
   } catch (error: any) {
     console.error("POST /api/clientes/[id]/pos-care falhou:", error);
-    return res.status(500).json({
-      error: "Falha ao gerar ou salvar o plano de cuidados inteligentes.",
+    const timedOut = error?.name === "AbortError";
+    return res.status(timedOut ? 504 : 500).json({
+      error: timedOut
+        ? "A IA demorou mais de 35 segundos. Tente novamente em instantes."
+        : "Falha ao gerar ou salvar o plano inteligente.",
       detalhe: error?.message || String(error),
     });
   }

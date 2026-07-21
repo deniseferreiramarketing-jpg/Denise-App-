@@ -322,38 +322,53 @@ Enfermagem - Podologia - Estética`;
     }
   };
 
-  // Generate Personalized smart Home Care advice via Gemini 3.5 model
+  // Generate Personalized smart Home Care advice with a client-side timeout.
   const triggerAICareGeneration = async () => {
-    if (!selectedClient) return;
+    if (!selectedClient || generatingCare) return;
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 45_000);
+
     try {
       setGeneratingCare(true);
       const res = await fetch(`/api/clientes/${selectedClient.id}/pos-care`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resumoManual })
+        body: JSON.stringify({ resumoManual }),
+        signal: controller.signal
       });
-      if (res.ok) {
-        const updatedCare = await res.json();
-        const updatedClient = {
-          ...selectedClient,
-          posCare: updatedCare
-        };
-        setSelectedClient(updatedClient);
-        setClientes(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c));
-      } else {
-        const errText = await res.text();
-        let errMsg = "Houve uma instabilidade no processamento de cuidados do Gemini.";
-        try {
-          const errData = JSON.parse(errText);
-          errMsg = errData.error || errMsg;
-        } catch (e) {
-          errMsg = `Erro no servidor (${res.status}): A API não retornou uma resposta válida em formato JSON. Isso geralmente acontece se a chave 'GEMINI_API_KEY' não estiver configurada no painel de controle do servidor ou nas variáveis de ambiente (.env).`;
-        }
-        alert(errMsg);
+
+      const responseText = await res.text();
+      let responseData: any = null;
+      try {
+        responseData = responseText ? JSON.parse(responseText) : null;
+      } catch {
+        // The message below is clearer than leaving the loading state spinning forever.
       }
+
+      if (!res.ok) {
+        const message = responseData?.detalhe
+          ? `${responseData.error || "Falha ao gerar o plano."}
+
+Detalhe: ${responseData.detalhe}`
+          : responseData?.error || `Falha no servidor (${res.status}).`;
+        throw new Error(message);
+      }
+
+      if (!responseData) throw new Error("A API retornou uma resposta vazia ou inválida.");
+
+      const updatedClient = { ...selectedClient, posCare: responseData };
+      setSelectedClient(updatedClient);
+      setClientes(prev => prev.map(c => c.id === updatedClient.id ? updatedClient : c));
+      alert("Plano e cuidados inteligentes gerados com sucesso!");
     } catch (err: any) {
-      alert("Falha na geração inteligente: " + err.message);
+      if (err?.name === "AbortError") {
+        alert("A geração demorou mais de 45 segundos e foi interrompida. Tente novamente em instantes.");
+      } else {
+        alert("Falha na geração inteligente: " + (err?.message || "erro desconhecido"));
+      }
     } finally {
+      window.clearTimeout(timeout);
       setGeneratingCare(false);
     }
   };
