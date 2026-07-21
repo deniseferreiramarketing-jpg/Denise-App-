@@ -20,28 +20,25 @@ import {
 // Load environment variables
 dotenv.config();
 
-// Initialize Firebase JS SDK dynamically for authenticated client-like access
+// Initialize Firebase using explicit configuration so Vercel includes it in the function bundle.
 let firestoreDB: any = null;
 
 try {
-  let config: any = {};
-  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-  if (fs.existsSync(configPath)) {
-    config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-  }
+  const firebaseConfig = {
+    projectId: process.env.FIREBASE_PROJECT_ID || "gen-lang-client-0427980254",
+    appId: process.env.FIREBASE_APP_ID || "1:152029939526:web:a6d4c4658e394e01ef0747",
+    apiKey: process.env.FIREBASE_API_KEY || "AIzaSyAo76nYx5Cyo1mDO98C2Ea049QaM7z78c0",
+    authDomain: process.env.FIREBASE_AUTH_DOMAIN || "gen-lang-client-0427980254.firebaseapp.com",
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "gen-lang-client-0427980254.firebasestorage.app",
+    messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "152029939526"
+  };
+  const databaseId = process.env.FIRESTORE_DATABASE_ID || "ai-studio-aaa6872e-3a96-41dc-aa58-820fbf9d86a3";
 
-  const projectId = config.projectId || process.env.FIREBASE_PROJECT_ID;
-  const databaseId = config.firestoreDatabaseId || process.env.FIRESTORE_DATABASE_ID;
-
-  if (projectId && config.apiKey) {
-    const clientApp = initClientApp(config);
-    firestoreDB = getFirestore(clientApp, databaseId || "(default)");
-    console.log(`🔥 Firebase Web SDK successfully configured. Project ID: ${projectId}, Database ID: ${databaseId}`);
-  } else {
-    console.warn("⚠️ No Firebase config API key or project ID found in firebase-applet-config.json. Fallback to local json database.");
-  }
+  const clientApp = initClientApp(firebaseConfig);
+  firestoreDB = getFirestore(clientApp, databaseId);
+  console.log(`🔥 Firestore configured. Project: ${firebaseConfig.projectId}, database: ${databaseId}`);
 } catch (error) {
-  console.error("❌ Failed to initiate Firebase Web SDK:", error);
+  console.error("❌ Failed to initialize Firestore:", error);
 }
 
 const app = express();
