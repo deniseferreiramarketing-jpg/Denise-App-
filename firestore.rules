@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Clientes collection (accessible for reading and writing)
+    match /clientes/{clienteId} {
+      allow read, write: if true;
+    }
+  }
+}

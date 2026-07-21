@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@300;400;500;600;700&family=Alex+Brush&family=Caveat:wght@450;600;700&display=swap');
+
+@theme {
+  --font-serif: "Cinzel", serif;
+  --font-sans: "Inter", sans-serif;
+  --font-accent: "Montserrat", sans-serif;
+  --font-signature: "Alex Brush", cursive;
+  --font-caveat: "Caveat", cursive;
+  
+  /* Custom warm champagne, gold, and slate palette to represent Denise's aesthetic */
+  --color-gold-50: #fcfbf9;
+  --color-gold-100: #f3ede7;
+  --color-gold-200: #e3d4c6;
+  --color-gold-300: #dfba9f;
+  --color-gold-400: #cca58d;
+  --color-gold-500: #c29a71; /* Rose/champagne gold */
+  --color-gold-600: #a07f5b;
+  --color-gold-700: #8c684d;
+  --color-gold-800: #5c4533;
+  --color-gold-900: #3b2b1f;
+  
+  --color-slate-50: #fafafb;
+  --color-slate-100: #f5f6f8;
+  --color-slate-200: #e5e8ec;
+  --color-slate-400: #9aa8b6;
+  --color-slate-500: #677b8f;
+  --color-slate-700: #445465;
+  --color-slate-800: #2f3b47;
+  --color-slate-900: #1b242c;
+
+  /* Frosted Glass Theme Colors */
+  --color-frost-brand: #8E7D6F;
+  --color-frost-accent: #5A7C7E;
+  --color-frost-bg: #F9F7F5;
+  --color-frost-text: #4A4440;
+  --color-frost-sand: #E8D8C3;
+  --color-frost-blue: #C9D7D8;
+  --color-frost-rose: #F2E1E1;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    background-color: var(--color-frost-bg);
+    color: var(--color-frost-text);
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-serif);
+    letter-spacing: -0.015em;
+  }
+}
+
+/* Glassmorphism helpers */
+.glass-container {
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 8px 32px 0 rgba(142, 125, 111, 0.04);
+}
+
+.glass-input {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+}
+
+.glass-input:focus {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: #8E7D6F;
+  box-shadow: 0 0 0 1px rgba(142, 125, 111, 0.2);
+}
+
+.glass-button-primary {
+  background: #8E7D6F;
+  color: #ffffff;
+  box-shadow: 0 4px 14px 0 rgba(142, 125, 111, 0.3);
+  transition: all 0.2s ease;
+}
+
+.glass-button-primary:hover {
+  background: #7a6a5d;
+  transform: translateY(-1px);
+}
+
+/* Custom modern print layouts for anamnesis details */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .print-page {
+    page-break-after: always;
+    background: white !important;
+    color: black !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.3);
+}
+::-webkit-scrollbar-thumb {
+  background: #E8D8C3;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #8E7D6F;
+}

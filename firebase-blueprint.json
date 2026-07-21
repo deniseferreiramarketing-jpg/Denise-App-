@@ -1,0 +1,81 @@
+{
+  "entities": {
+    "Cliente": {
+      "title": "Cliente",
+      "description": "Ficha do cliente contendo anamnese integrada, avaliação técnica e pós-care.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "ID exclusivo do paciente"
+        },
+        "tokenAcesso": {
+          "type": "string",
+          "description": "Token de acesso rápido para o paciente preencher"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data de criação"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data da última atualização"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["aguardando_cliente", "concluido"],
+          "description": "Status de preenchimento da ficha"
+        },
+        "identificacao": {
+          "type": "object",
+          "description": "Identificação e dados cadastrais"
+        },
+        "queixaPrincipal": {
+          "type": "string",
+          "description": "Queixa principal do cliente"
+        },
+        "historicoSaude": {
+          "type": "object",
+          "description": "Histórico de saúde"
+        },
+        "medicamentosAlergias": {
+          "type": "object",
+          "description": "Medicamentos contínuos e alergias"
+        },
+        "habitosRotina": {
+          "type": "object",
+          "description": "Hábitos e rotina diários"
+        },
+        "assinaturaPaciente": {
+          "type": "string",
+          "description": "Assinatura do paciente digitalizada"
+        },
+        "avaliacaoTecnica": {
+          "type": "object",
+          "description": "Avaliação clínica técnica feita pela profissional"
+        },
+        "assinaturaProfissional": {
+          "type": "string",
+          "description": "Assinatura digitalizada da profissional"
+        },
+        "assinaturaProfissionalData": {
+          "type": "string",
+          "description": "Data de assinatura da profissional"
+        },
+        "posCare": {
+          "type": "object",
+          "description": "Recomendações inteligentes pós-procedimento"
+        }
+      },
+      "required": ["id", "createdAt", "updatedAt", "status"]
+    }
+  },
+  "firestore": {
+    "/clientes/{clienteId}": {
+      "schema": "Cliente",
+      "description": "Armazenamento seguro de fichas de clientes de forma síncrona e persistente"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Clínica Denise Ferreira",
+  "description": "Aplicativo de anamnese integrada e pós-care inteligente para podologia, enfermagem e estética.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
