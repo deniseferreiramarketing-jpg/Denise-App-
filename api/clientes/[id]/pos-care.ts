@@ -113,7 +113,7 @@ export default async function handler(req: Request, res: Response) {
       return res.status(500).json({ error: "A variável GEMINI_API_KEY não está configurada na Vercel." });
     }
 
-    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash-lite";
+    const model = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 35_000);
 
