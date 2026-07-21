@@ -1,4 +1,5 @@
 // Entrada curinga da API para a Vercel.
-import app from "../server";
+// A extensão .ts explícita é importante para o empacotamento ESM.
+import app from "../server.ts";
 
 export default app;
