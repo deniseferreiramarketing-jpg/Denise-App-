@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import dotenv from "dotenv";
 import { GoogleGenAI, Type } from "@google/genai";
-import { initializeApp as initClientApp } from "firebase/app";
+import { initializeApp as initClientApp, getApps, getApp } from "firebase/app";
 import { 
   getFirestore, 
   collection, 
@@ -34,7 +34,7 @@ try {
   };
   const databaseId = process.env.FIRESTORE_DATABASE_ID || "ai-studio-aaa6872e-3a96-41dc-aa58-820fbf9d86a3";
 
-  const clientApp = initClientApp(firebaseConfig);
+  const clientApp = getApps().length ? getApp() : initClientApp(firebaseConfig);
   firestoreDB = getFirestore(clientApp, databaseId);
   console.log(`🔥 Firestore configured. Project: ${firebaseConfig.projectId}, database: ${databaseId}`);
 } catch (error) {
@@ -396,46 +396,62 @@ async function getClientes(): Promise<any[]> {
 }
 
 async function getClienteByIdOrToken(idOrToken: string): Promise<any | null> {
-  if (firestoreDB) {
-    try {
-      // 1. Try finding by document id directly
-      const docRef = await getDoc(doc(firestoreDB, "clientes", idOrToken));
-      if (docRef.exists()) {
-        return docRef.data() || null;
-      }
-      // 2. Try looking up record matching tokenAcesso
-      const snapshot = await getDocs(query(collection(firestoreDB, "clientes"), where("tokenAcesso", "==", idOrToken), limit(1)));
-      if (!snapshot.empty) {
-        return snapshot.docs[0].data();
-      }
-      return null;
-    } catch (e) {
-      console.error(`Critical error fetching client ${idOrToken} from Firestore:`, e);
-      throw e; // Do not fall back to local ephemeral file to prevent data loss or showing old dummy data
-    }
+  if (!firestoreDB) {
+    throw new Error("Firestore não foi inicializado. O cadastro permanente está indisponível.");
   }
-  const data = loadDatabase();
-  return data.find((c: any) => c.id === idOrToken || c.tokenAcesso === idOrToken) || null;
+
+  try {
+    // 1. Busca direta pelo ID interno do paciente.
+    const directRef = await getDoc(doc(firestoreDB, "clientes", idOrToken));
+    if (directRef.exists()) return directRef.data() || null;
+
+    // 2. Busca pelo índice de token. Isso evita depender de consulta por campo.
+    const tokenRef = await getDoc(doc(firestoreDB, "clienteTokens", idOrToken));
+    if (tokenRef.exists()) {
+      const patientId = tokenRef.data()?.clienteId;
+      if (patientId) {
+        const patientRef = await getDoc(doc(firestoreDB, "clientes", patientId));
+        if (patientRef.exists()) return patientRef.data() || null;
+      }
+    }
+
+    // 3. Compatibilidade com registros antigos que não possuem índice de token.
+    const snapshot = await getDocs(query(collection(firestoreDB, "clientes"), where("tokenAcesso", "==", idOrToken), limit(1)));
+    if (!snapshot.empty) return snapshot.docs[0].data();
+
+    return null;
+  } catch (e) {
+    console.error(`Critical error fetching client ${idOrToken} from Firestore:`, e);
+    throw e;
+  }
 }
 
 async function saveCliente(cliente: any): Promise<void> {
-  if (firestoreDB) {
-    try {
-      await setDoc(doc(firestoreDB, "clientes", cliente.id), cliente);
-      return;
-    } catch (e) {
-      console.error("Critical error saving customer to Firestore:", e);
-      throw e; // Do not fall back to local ephemeral file to prevent data loss
+  if (!firestoreDB) {
+    throw new Error("Firestore não foi inicializado. O cadastro não foi salvo.");
+  }
+
+  try {
+    const clientRef = doc(firestoreDB, "clientes", cliente.id);
+    await setDoc(clientRef, cliente);
+
+    if (cliente.tokenAcesso) {
+      await setDoc(doc(firestoreDB, "clienteTokens", cliente.tokenAcesso), {
+        clienteId: cliente.id,
+        tokenAcesso: cliente.tokenAcesso,
+        updatedAt: new Date().toISOString()
+      });
     }
+
+    // Confirmação real: só considera salvo depois de reler o documento.
+    const verification = await getDoc(clientRef);
+    if (!verification.exists()) {
+      throw new Error("O Firestore não confirmou a gravação do paciente.");
+    }
+  } catch (e) {
+    console.error("Critical error saving customer to Firestore:", e);
+    throw e;
   }
-  const data = loadDatabase();
-  const index = data.findIndex((c: any) => c.id === cliente.id);
-  if (index !== -1) {
-    data[index] = cliente;
-  } else {
-    data.unshift(cliente);
-  }
-  saveDatabase(data);
 }
 
 async function deleteCliente(id: string): Promise<boolean> {
@@ -573,8 +589,16 @@ app.post("/api/clientes", async (req, res) => {
     assinaturaProfissionalData: ""
   };
 
-  await saveCliente(newPatient);
-  res.status(201).json(newPatient);
+  try {
+    await saveCliente(newPatient);
+    res.status(201).json({ ...newPatient, persistencia: "firestore-confirmada" });
+  } catch (e: any) {
+    console.error("Falha definitiva ao criar paciente:", e);
+    res.status(500).json({
+      error: "Não foi possível salvar o paciente no banco permanente.",
+      detalhe: e?.message || String(e)
+    });
+  }
 });
 
 // Update: Client submits anamnesis (identification, anamnesis answers, and patient signature)
