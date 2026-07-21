@@ -1,0 +1,12 @@
+CORREÇÃO MÍNIMA — NÃO APAGUE O PROJETO
+
+1. Copie a pasta api deste pacote para a raiz do repositório Denise-App-.
+2. Confirme a substituição/mesclagem.
+3. O arquivo obrigatório no GitHub deve ser:
+   api/clientes/[id].ts
+4. No GitHub Desktop: Commit to main e Push origin.
+5. Aguarde o deploy Ready na Vercel.
+6. Crie um paciente novo e teste o link em janela anônima.
+
+Esta rota é explícita e tem prioridade sobre api/[...path].ts.
+Ela elimina o problema da rota genérica ao abrir /api/clientes/IDENTIFICADOR.
