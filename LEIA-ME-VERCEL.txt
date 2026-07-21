@@ -1,0 +1,13 @@
+DENISE APP — CORREÇÃO PARA VERCEL
+
+Alterações realizadas:
+1. Criada a função serverless api/[...path].ts.
+2. O Express agora é exportado para a Vercel.
+3. O servidor tradicional só inicia fora da Vercel.
+4. Criado o arquivo vercel.json.
+
+Objetivo:
+Fazer as rotas /api/clientes e as demais rotas de cadastro funcionarem na Vercel.
+
+Importante:
+O armazenamento permanente depende do Firestore. O arquivo db/storage.json não deve ser usado como banco definitivo na Vercel.
