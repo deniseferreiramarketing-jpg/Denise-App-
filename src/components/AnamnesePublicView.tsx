@@ -84,12 +84,11 @@ export default function AnamnesePublicView({ token, onSubmitted }: AnamnesePubli
     async function fetchClient() {
       try {
         setLoading(true);
-        const res = await fetch(`/api/clientes/${encodeURIComponent(token)}?v=${Date.now()}`, { cache: "no-store" });
-        const payload = await res.json().catch(() => null);
+        const res = await fetch(`/api/clientes/${token}`);
         if (!res.ok) {
-          throw new Error(payload?.error || `Não foi possível abrir a ficha (erro ${res.status}).`);
+          throw new Error("Link inválido ou expirado. Verifique com a Dra. Denise.");
         }
-        const data: Cliente = payload;
+        const data: Cliente = await res.json();
         setClient(data);
         
         // Prefill default fields from invitation if present

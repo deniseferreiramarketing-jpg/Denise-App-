@@ -136,7 +136,7 @@ Enfermagem - Podologia - Estética`;
   const [newNome, setNewNome] = useState("");
   const [newTelefone, setNewTelefone] = useState("");
   const [newEmail, setNewEmail] = useState("");
-  const [creatingClient, setCreatingClient] = useState(false);
+  const [isCreatingPatient, setIsCreatingPatient] = useState(false);
 
   // Technical Evaluation Form states for editing
   const [avaliacao, setAvaliacao] = useState<AvaliacaoTecnica>({
@@ -272,27 +272,24 @@ Enfermagem - Podologia - Estética`;
   // Handle client creation
   const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newNome.trim() || creatingClient) return;
+    if (!newNome.trim() || isCreatingPatient) return;
 
-    setCreatingClient(true);
+    setIsCreatingPatient(true);
     try {
-      const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), 20000);
       const res = await fetch("/api/clientes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome: newNome.trim(), telefone: newTelefone, email: newEmail }),
-        signal: controller.signal
+        cache: "no-store",
+        body: JSON.stringify({ nome: newNome.trim(), telefone: newTelefone, email: newEmail })
       });
-      window.clearTimeout(timeoutId);
 
       const payload = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error(payload?.detalhe || payload?.error || `Erro ${res.status} ao salvar o paciente.`);
+        throw new Error(payload?.error || `Erro ${res.status} ao salvar o paciente.`);
       }
 
       const created: Cliente = payload;
-      setClientes(prev => [created, ...prev.filter(c => c.id !== created.id)]);
+      setClientes(prev => [created, ...prev.filter(item => item.id !== created.id)]);
       setShowInviteModal(false);
       setNewNome("");
       setNewTelefone("");
@@ -300,13 +297,10 @@ Enfermagem - Podologia - Estética`;
       handleSelectClient(created);
       setActiveTab("anamnese");
     } catch (err: any) {
-      const message = err?.name === "AbortError"
-        ? "O cadastro demorou mais de 20 segundos. Atualize a lista antes de tentar novamente."
-        : (err?.message || "Falha ao criar o cadastro.");
-      alert(message);
-      await fetchClientes();
+      console.error("Falha ao criar paciente:", err);
+      alert(err?.message || "Falha ao criar o paciente.");
     } finally {
-      setCreatingClient(false);
+      setIsCreatingPatient(false);
     }
   };
 
@@ -399,7 +393,7 @@ Enfermagem - Podologia - Estética`;
   // Format share link
   const getShareLink = (token: string) => {
     const currentUrl = window.location.origin;
-    return `${currentUrl}/?id=${encodeURIComponent(token)}`;
+    return `${currentUrl}?id=${token}`;
   };
 
   // Copy share link and open WhatsApp
@@ -1519,18 +1513,18 @@ Enfermagem - Podologia - Estética`;
                   id="btn-close-modal"
                   type="button"
                   onClick={() => setShowInviteModal(false)}
-                  disabled={creatingClient}
-                  className="px-4 py-2 text-xs font-semibold text-stone-500 hover:bg-stone-50 rounded-lg cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isCreatingPatient}
+                  className="px-4 py-2 text-xs font-semibold text-stone-500 hover:bg-stone-50 rounded-lg cursor-pointer disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button
                   id="btn-submit-modal"
                   type="submit"
-                  disabled={creatingClient}
+                  disabled={isCreatingPatient}
                   className="px-4 py-2 text-xs font-semibold rounded-lg bg-stone-900 text-gold-100 hover:bg-stone-850 cursor-pointer shadow disabled:opacity-60 disabled:cursor-wait"
                 >
-                  {creatingClient ? "Salvando..." : "Confirmar Cadastro"}
+                  {isCreatingPatient ? "Salvando..." : "Confirmar Cadastro"}
                 </button>
               </div>
             </form>

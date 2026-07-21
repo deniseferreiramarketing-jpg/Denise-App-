@@ -2,8 +2,9 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import dotenv from "dotenv";
+import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
-import { initializeApp as initClientApp, getApps, getApp } from "firebase/app";
+import { initializeApp as initClientApp } from "firebase/app";
 import { 
   getFirestore, 
   collection, 
@@ -20,25 +21,28 @@ import {
 // Load environment variables
 dotenv.config();
 
-// Initialize Firebase using explicit configuration so Vercel includes it in the function bundle.
+// Initialize Firebase JS SDK dynamically for authenticated client-like access
 let firestoreDB: any = null;
 
 try {
-  const firebaseConfig = {
-    projectId: process.env.FIREBASE_PROJECT_ID || "gen-lang-client-0427980254",
-    appId: process.env.FIREBASE_APP_ID || "1:152029939526:web:a6d4c4658e394e01ef0747",
-    apiKey: process.env.FIREBASE_API_KEY || "AIzaSyAo76nYx5Cyo1mDO98C2Ea049QaM7z78c0",
-    authDomain: process.env.FIREBASE_AUTH_DOMAIN || "gen-lang-client-0427980254.firebaseapp.com",
-    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || "gen-lang-client-0427980254.firebasestorage.app",
-    messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || "152029939526"
-  };
-  const databaseId = process.env.FIRESTORE_DATABASE_ID || "ai-studio-aaa6872e-3a96-41dc-aa58-820fbf9d86a3";
+  let config: any = {};
+  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+  if (fs.existsSync(configPath)) {
+    config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+  }
 
-  const clientApp = getApps().length ? getApp() : initClientApp(firebaseConfig);
-  firestoreDB = getFirestore(clientApp, databaseId);
-  console.log(`🔥 Firestore configured. Project: ${firebaseConfig.projectId}, database: ${databaseId}`);
+  const projectId = config.projectId || process.env.FIREBASE_PROJECT_ID;
+  const databaseId = config.firestoreDatabaseId || process.env.FIRESTORE_DATABASE_ID;
+
+  if (projectId && config.apiKey) {
+    const clientApp = initClientApp(config);
+    firestoreDB = getFirestore(clientApp, databaseId || "(default)");
+    console.log(`🔥 Firebase Web SDK successfully configured. Project ID: ${projectId}, Database ID: ${databaseId}`);
+  } else {
+    console.warn("⚠️ No Firebase config API key or project ID found in firebase-applet-config.json. Fallback to local json database.");
+  }
 } catch (error) {
-  console.error("❌ Failed to initialize Firestore:", error);
+  console.error("❌ Failed to initiate Firebase Web SDK:", error);
 }
 
 const app = express();
@@ -396,57 +400,46 @@ async function getClientes(): Promise<any[]> {
 }
 
 async function getClienteByIdOrToken(idOrToken: string): Promise<any | null> {
-  if (!firestoreDB) {
-    throw new Error("Firestore não foi inicializado. O cadastro permanente está indisponível.");
-  }
-
-  try {
-    // 1. Busca direta pelo ID interno do paciente.
-    const directRef = await getDoc(doc(firestoreDB, "clientes", idOrToken));
-    if (directRef.exists()) return directRef.data() || null;
-
-    // 2. Busca pelo índice de token. Isso evita depender de consulta por campo.
-    const tokenRef = await getDoc(doc(firestoreDB, "clienteTokens", idOrToken));
-    if (tokenRef.exists()) {
-      const patientId = tokenRef.data()?.clienteId;
-      if (patientId) {
-        const patientRef = await getDoc(doc(firestoreDB, "clientes", patientId));
-        if (patientRef.exists()) return patientRef.data() || null;
+  if (firestoreDB) {
+    try {
+      // 1. Try finding by document id directly
+      const docRef = await getDoc(doc(firestoreDB, "clientes", idOrToken));
+      if (docRef.exists()) {
+        return docRef.data() || null;
       }
+      // 2. Try looking up record matching tokenAcesso
+      const snapshot = await getDocs(query(collection(firestoreDB, "clientes"), where("tokenAcesso", "==", idOrToken), limit(1)));
+      if (!snapshot.empty) {
+        return snapshot.docs[0].data();
+      }
+      return null;
+    } catch (e) {
+      console.error(`Critical error fetching client ${idOrToken} from Firestore:`, e);
+      throw e; // Do not fall back to local ephemeral file to prevent data loss or showing old dummy data
     }
-
-    // 3. Compatibilidade com registros antigos que não possuem índice de token.
-    const snapshot = await getDocs(query(collection(firestoreDB, "clientes"), where("tokenAcesso", "==", idOrToken), limit(1)));
-    if (!snapshot.empty) return snapshot.docs[0].data();
-
-    return null;
-  } catch (e) {
-    console.error(`Critical error fetching client ${idOrToken} from Firestore:`, e);
-    throw e;
   }
+  const data = loadDatabase();
+  return data.find((c: any) => c.id === idOrToken || c.tokenAcesso === idOrToken) || null;
 }
 
 async function saveCliente(cliente: any): Promise<void> {
-  if (!firestoreDB) {
-    throw new Error("Firestore não foi inicializado. O cadastro não foi salvo.");
-  }
-
-  try {
-    const clientRef = doc(firestoreDB, "clientes", cliente.id);
-    await setDoc(clientRef, cliente);
-
-    // O token também é usado como ID nos novos cadastros. Assim o link público
-    // abre o prontuário diretamente, sem depender de uma segunda coleção/índice.
-
-    // Confirmação real: só considera salvo depois de reler o documento.
-    const verification = await getDoc(clientRef);
-    if (!verification.exists()) {
-      throw new Error("O Firestore não confirmou a gravação do paciente.");
+  if (firestoreDB) {
+    try {
+      await setDoc(doc(firestoreDB, "clientes", cliente.id), cliente);
+      return;
+    } catch (e) {
+      console.error("Critical error saving customer to Firestore:", e);
+      throw e; // Do not fall back to local ephemeral file to prevent data loss
     }
-  } catch (e) {
-    console.error("Critical error saving customer to Firestore:", e);
-    throw e;
   }
+  const data = loadDatabase();
+  const index = data.findIndex((c: any) => c.id === cliente.id);
+  if (index !== -1) {
+    data[index] = cliente;
+  } else {
+    data.unshift(cliente);
+  }
+  saveDatabase(data);
 }
 
 async function deleteCliente(id: string): Promise<boolean> {
@@ -468,7 +461,6 @@ async function deleteCliente(id: string): Promise<boolean> {
 
 // Client endpoint: Get all patients
 app.get("/api/clientes", async (req, res) => {
-  res.set("Cache-Control", "no-store");
   try {
     const data = await getClientes();
     res.json(data);
@@ -479,7 +471,6 @@ app.get("/api/clientes", async (req, res) => {
 
 // Client endpoint: Fetch single patient by ID or access token (important for the client link)
 app.get("/api/clientes/:id", async (req, res) => {
-  res.set("Cache-Control", "no-store");
   try {
     const idOrToken = req.params.id;
     const match = await getClienteByIdOrToken(idOrToken);
@@ -500,10 +491,8 @@ app.post("/api/clientes", async (req, res) => {
     return res.status(400).json({ error: "O nome completo do paciente é indispensável." });
   }
 
-  const token = `token-${Math.random().toString(36).substring(2, 10)}${Date.now().toString().slice(-6)}`;
-  // O documento é salvo com o próprio token como ID. Isso elimina falhas de
-  // sincronização entre o paciente e um índice separado de tokens.
-  const newId = token;
+  const newId = `paciente-${Date.now()}`;
+  const token = `token-${Math.random().toString(36).substring(2, 10)}${Date.now().toString().substring(8)}`;
 
   const newPatient = {
     id: newId,
@@ -588,16 +577,8 @@ app.post("/api/clientes", async (req, res) => {
     assinaturaProfissionalData: ""
   };
 
-  try {
-    await saveCliente(newPatient);
-    res.status(201).json({ ...newPatient, persistencia: "firestore-confirmada" });
-  } catch (e: any) {
-    console.error("Falha definitiva ao criar paciente:", e);
-    res.status(500).json({
-      error: "Não foi possível salvar o paciente no banco permanente.",
-      detalhe: e?.message || String(e)
-    });
-  }
+  await saveCliente(newPatient);
+  res.status(201).json(newPatient);
 });
 
 // Update: Client submits anamnesis (identification, anamnesis answers, and patient signature)
@@ -847,5 +828,27 @@ app.post("/api/clientes/importar", async (req, res) => {
   }
 });
 
-// Exportado como função serverless da Vercel.
-export default app;
+// Setup Vite middleware for serving build and react client in development
+async function startServer() {
+  if (process.env.NODE_ENV !== "production") {
+    console.log("Starting server in DEVELOPMENT mode with dynamic Vite asset rendering...");
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    console.log("Starting server in PRODUCTION mode with compiled assets...");
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`🚀 Denise Ferreira Anamnese App is listening on port ${PORT}`);
+  });
+}
+
+startServer();
