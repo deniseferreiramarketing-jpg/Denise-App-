@@ -1,0 +1,14 @@
+CORREÇÃO FINAL APLICADA
+
+1. Foram criadas rotas Vercel específicas:
+   api/clientes/index.ts       -> lista e cadastro
+   api/clientes/[id].ts        -> abertura do link público
+
+2. O link não depende mais da rota genérica api/[...path].ts.
+3. Pacientes novos usam o token como ID real no Firestore.
+4. Pacientes antigos continuam abrindo: a API procura por ID e por tokenAcesso.
+5. A busca não depende de índice do Firestore.
+6. Cache foi desativado para impedir resposta 404 antiga.
+
+Após substituir os arquivos, faça commit, push e aguarde o deploy Ready.
+Teste somente com um paciente novo.
