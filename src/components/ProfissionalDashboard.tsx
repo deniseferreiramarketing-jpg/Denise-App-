@@ -136,7 +136,6 @@ Enfermagem - Podologia - Estética`;
   const [newNome, setNewNome] = useState("");
   const [newTelefone, setNewTelefone] = useState("");
   const [newEmail, setNewEmail] = useState("");
-  const [isCreatingPatient, setIsCreatingPatient] = useState(false);
 
   // Technical Evaluation Form states for editing
   const [avaliacao, setAvaliacao] = useState<AvaliacaoTecnica>({
@@ -272,35 +271,26 @@ Enfermagem - Podologia - Estética`;
   // Handle client creation
   const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newNome.trim() || isCreatingPatient) return;
+    if (!newNome.trim()) return;
 
-    setIsCreatingPatient(true);
     try {
       const res = await fetch("/api/clientes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({ nome: newNome.trim(), telefone: newTelefone, email: newEmail })
+        body: JSON.stringify({ nome: newNome, telefone: newTelefone, email: newEmail })
       });
-
-      const payload = await res.json().catch(() => null);
-      if (!res.ok) {
-        throw new Error(payload?.error || `Erro ${res.status} ao salvar o paciente.`);
+      if (res.ok) {
+        const created: Cliente = await res.json();
+        setClientes(prev => [created, ...prev]);
+        setShowInviteModal(false);
+        setNewNome("");
+        setNewTelefone("");
+        setNewEmail("");
+        handleSelectClient(created); // Automatically select newly created patient
+        setActiveTab("anamnese");
       }
-
-      const created: Cliente = payload;
-      setClientes(prev => [created, ...prev.filter(item => item.id !== created.id)]);
-      setShowInviteModal(false);
-      setNewNome("");
-      setNewTelefone("");
-      setNewEmail("");
-      handleSelectClient(created);
-      setActiveTab("anamnese");
-    } catch (err: any) {
-      console.error("Falha ao criar paciente:", err);
-      alert(err?.message || "Falha ao criar o paciente.");
-    } finally {
-      setIsCreatingPatient(false);
+    } catch (err) {
+      alert("Falha ao criar o convite.");
     }
   };
 
@@ -391,14 +381,16 @@ Enfermagem - Podologia - Estética`;
   };
 
   // Format share link
-  const getShareLink = (token: string) => {
+  const getShareLink = (clientItem: Cliente) => {
     const currentUrl = window.location.origin;
-    return `${currentUrl}?id=${encodeURIComponent(token)}`;
+    // Usa o ID real do documento no Firestore. A consulta por ID é direta e
+    // não depende de índice, busca por token ou sincronização auxiliar.
+    return `${currentUrl}?id=${encodeURIComponent(clientItem.id)}`;
   };
 
   // Copy share link and open WhatsApp
   const handleCopyLink = (clientItem: Cliente) => {
-    const link = getShareLink(clientItem.tokenAcesso);
+    const link = getShareLink(clientItem);
     navigator.clipboard.writeText(link);
     setCopiedId(clientItem.id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -406,7 +398,7 @@ Enfermagem - Podologia - Estética`;
 
   // WhatsApp click forwarder
   const handleSendWhatsApp = (clientItem: Cliente) => {
-    const link = getShareLink(clientItem.tokenAcesso);
+    const link = getShareLink(clientItem);
     const textMsg = `Olá *${clientItem.identificacao.nomeCompleto}*! 🌸 Aqui é a Denise Ferreira.\n\nPara que eu possa realizar um diagnóstico preciso e humanizado na sua consulta, por favor preencha sua ficha clínica de anamnese antes de chegar, clicando neste link seguro:\n${link}\n\nObrigada e nos vemos em breve! ✨`;
     const cleanPhone = clientItem.identificacao.whatsapp || clientItem.identificacao.telefone.replace(/\D/g, "");
     
@@ -767,7 +759,7 @@ Enfermagem - Podologia - Estética`;
                               id="copy-link-input-display"
                               type="text"
                               readOnly
-                              value={getShareLink(selectedClient.tokenAcesso)}
+                              value={getShareLink(selectedClient)}
                               className="bg-transparent border-none text-xxs truncate flex-1 text-gold-700 pointer-events-none"
                             />
                             <button
@@ -1513,18 +1505,16 @@ Enfermagem - Podologia - Estética`;
                   id="btn-close-modal"
                   type="button"
                   onClick={() => setShowInviteModal(false)}
-                  disabled={isCreatingPatient}
-                  className="px-4 py-2 text-xs font-semibold text-stone-500 hover:bg-stone-50 rounded-lg cursor-pointer disabled:opacity-50"
+                  className="px-4 py-2 text-xs font-semibold text-stone-500 hover:bg-stone-50 rounded-lg cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   id="btn-submit-modal"
                   type="submit"
-                  disabled={isCreatingPatient}
-                  className="px-4 py-2 text-xs font-semibold rounded-lg bg-stone-900 text-gold-100 hover:bg-stone-850 cursor-pointer shadow disabled:opacity-60 disabled:cursor-wait"
+                  className="px-4 py-2 text-xs font-semibold rounded-lg bg-stone-900 text-gold-100 hover:bg-stone-850 cursor-pointer shadow"
                 >
-                  {isCreatingPatient ? "Salvando..." : "Confirmar Cadastro"}
+                  Confirmar Cadastro
                 </button>
               </div>
             </form>

@@ -472,7 +472,8 @@ app.get("/api/clientes", async (req, res) => {
 // Client endpoint: Fetch single patient by ID or access token (important for the client link)
 app.get("/api/clientes/:id", async (req, res) => {
   try {
-    const idOrToken = req.params.id;
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    const idOrToken = decodeURIComponent(req.params.id);
     const match = await getClienteByIdOrToken(idOrToken);
     
     if (!match) {
@@ -491,9 +492,8 @@ app.post("/api/clientes", async (req, res) => {
     return res.status(400).json({ error: "O nome completo do paciente é indispensável." });
   }
 
-  // O token é também o ID do documento. O link público passa a fazer leitura direta.
-  const token = `token-${Math.random().toString(36).substring(2, 12)}-${Date.now().toString(36)}`;
-  const newId = token;
+  const newId = `paciente-${Date.now()}`;
+  const token = `token-${Math.random().toString(36).substring(2, 10)}${Date.now().toString().substring(8)}`;
 
   const newPatient = {
     id: newId,
@@ -579,11 +579,7 @@ app.post("/api/clientes", async (req, res) => {
   };
 
   await saveCliente(newPatient);
-  const confirmed = await getClienteByIdOrToken(token);
-  if (!confirmed || confirmed.tokenAcesso !== token) {
-    return res.status(500).json({ error: "O Firestore não confirmou o token do link recém-criado." });
-  }
-  res.status(201).json(confirmed);
+  res.status(201).json(newPatient);
 });
 
 // Update: Client submits anamnesis (identification, anamnesis answers, and patient signature)

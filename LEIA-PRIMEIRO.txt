@@ -1,13 +1,14 @@
-CORREÇÃO DIRETA DO LINK
+CORREÇÃO DO LINK PÚBLICO
 
-O erro persistia porque a versão publicada ainda gravava o documento com ID paciente-..., enquanto o link usava token-....
-Nesta versão, o token é o próprio ID do documento no Firestore.
+O link agora usa o ID real do documento do paciente (paciente-...), e não o token.
+Isso elimina a busca por token que estava retornando "acesso não localizado".
 
-PASSOS:
-1. Apague do repositório qualquer pasta api/clientes e a pasta lib.
-2. Substitua todos os arquivos pelos deste ZIP.
-3. Commit e Push origin.
-4. Aguarde o deploy Ready.
-5. Crie um paciente NOVO e teste o novo link.
+1. Apague o conteúdo antigo do seu repositório local, preservando somente a pasta .git.
+2. Copie todos estes arquivos para o repositório.
+3. No GitHub Desktop, confirme que src/components/ProfissionalDashboard.tsx foi alterado.
+4. Commit: Usar ID real no link público
+5. Push origin.
+6. Na Vercel, confirme que o deploy foi criado a partir desse commit.
+7. Abra um paciente já cadastrado e copie novamente o link. Ele deverá terminar em ?id=paciente-...
 
-Links antigos não persistidos não podem ser recuperados.
+IMPORTANTE: se o link ainda terminar em ?id=token-..., a versão nova não foi publicada.
