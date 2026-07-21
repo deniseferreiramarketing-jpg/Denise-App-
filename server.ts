@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import dotenv from "dotenv";
+import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import { initializeApp as initClientApp } from "firebase/app";
 import { 
@@ -827,14 +828,10 @@ app.post("/api/clientes/importar", async (req, res) => {
   }
 });
 
-// Export the Express app so Vercel can run it as a Serverless Function.
-export default app;
-
-// Start a traditional local server only outside Vercel.
+// Setup Vite middleware for serving build and react client in development
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     console.log("Starting server in DEVELOPMENT mode with dynamic Vite asset rendering...");
-    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -854,6 +851,4 @@ async function startServer() {
   });
 }
 
-if (!process.env.VERCEL) {
-  startServer();
-}
+startServer();
