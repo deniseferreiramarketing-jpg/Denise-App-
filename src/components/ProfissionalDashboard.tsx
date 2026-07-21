@@ -393,7 +393,7 @@ Enfermagem - Podologia - Estética`;
   // Format share link
   const getShareLink = (token: string) => {
     const currentUrl = window.location.origin;
-    return `${currentUrl}?id=${token}`;
+    return `${currentUrl}?id=${encodeURIComponent(token)}`;
   };
 
   // Copy share link and open WhatsApp

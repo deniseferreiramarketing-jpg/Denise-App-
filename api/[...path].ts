@@ -494,8 +494,9 @@ app.post("/api/clientes", async (req, res) => {
     return res.status(400).json({ error: "O nome completo do paciente é indispensável." });
   }
 
-  const newId = `paciente-${Date.now()}`;
-  const token = `token-${Math.random().toString(36).substring(2, 10)}${Date.now().toString().substring(8)}`;
+  // O token é também o ID do documento. O link público passa a fazer leitura direta.
+  const token = `token-${Math.random().toString(36).substring(2, 12)}-${Date.now().toString(36)}`;
+  const newId = token;
 
   const newPatient = {
     id: newId,
@@ -582,10 +583,10 @@ app.post("/api/clientes", async (req, res) => {
 
     await saveCliente(newPatient);
 
-    // Confirm that the record can be read immediately before returning success.
+    // Confirma a gravação pelo mesmo ID usado no link público.
     const confirmed = await getClienteByIdOrToken(token);
-    if (!confirmed) {
-      throw new Error("O paciente foi enviado ao banco, mas não pôde ser confirmado pelo link de acesso.");
+    if (!confirmed || confirmed.tokenAcesso !== token) {
+      throw new Error("O Firestore não confirmou o token do link recém-criado.");
     }
 
     return res.status(201).json(confirmed);

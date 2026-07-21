@@ -84,7 +84,7 @@ export default function AnamnesePublicView({ token, onSubmitted }: AnamnesePubli
     async function fetchClient() {
       try {
         setLoading(true);
-        const res = await fetch(`/api/clientes/${token}`);
+        const res = await fetch(`/api/clientes/${encodeURIComponent(token)}`, { cache: "no-store" });
         if (!res.ok) {
           throw new Error("Link inválido ou expirado. Verifique com a Dra. Denise.");
         }
